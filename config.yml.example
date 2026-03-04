@@ -1,0 +1,10 @@
+greenmail_api:
+  base_url: "http://localhost:8080"
+
+smtp:
+  host: "localhost"
+  port: 3025
+  username: ""
+  password: ""
+  use_tls: false
+  sender_email: "noreply@example.com"
