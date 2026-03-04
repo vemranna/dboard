@@ -1,8 +1,10 @@
 import smtplib
 from dataclasses import dataclass
 from datetime import datetime
+from email.header import decode_header
 from email import message_from_string
 from email.message import EmailMessage
+from email.utils import parseaddr
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
@@ -66,8 +68,8 @@ def fetch_messages(cfg: AppConfig, user_identifier: str, folder: str = DEFAULT_F
 
 def parse_mime(mime_message: str) -> dict[str, Any]:
     parsed = message_from_string(mime_message)
-    from_addr = parsed.get("From", "")
-    subject = parsed.get("Subject", "")
+    from_addr = decode_mime_header(parsed.get("From", ""))
+    subject = decode_mime_header(parsed.get("Subject", ""))
     date_raw = parsed.get("Date", "")
 
     date_value = ""
@@ -84,9 +86,27 @@ def parse_mime(mime_message: str) -> dict[str, Any]:
     return {
         "from": from_addr,
         "subject": subject,
+        "from_email": parseaddr(from_addr)[1],
         "date": date_value,
         "has_attachment": has_attachment,
     }
+
+
+def decode_mime_header(value: str) -> str:
+    if not value:
+        return ""
+
+    parts: list[str] = []
+    for decoded, charset in decode_header(value):
+        if isinstance(decoded, bytes):
+            try:
+                parts.append(decoded.decode(charset or "utf-8", errors="replace"))
+            except LookupError:
+                parts.append(decoded.decode("utf-8", errors="replace"))
+        else:
+            parts.append(decoded)
+
+    return "".join(parts)
 
 
 def top_recent_messages(messages: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
@@ -195,7 +215,10 @@ def app() -> None:
     selected_message = next(m for m in messages if m["uid"] == selected_uid)
 
     with st.form("reply_form"):
-        to_email = st.text_input("To", value=selected_message["from"])
+        to_email = st.text_input(
+            "To",
+            value=selected_message["from_email"] or selected_message["from"],
+        )
         subject = st.text_input("Subject", value=f"Re: {selected_message['subject']}")
         body = st.text_area("Body", value="", height=180)
         attachment = st.file_uploader("Attachment", accept_multiple_files=False)
